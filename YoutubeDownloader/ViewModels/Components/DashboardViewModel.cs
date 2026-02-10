@@ -156,7 +156,9 @@ public partial class DashboardViewModel : ViewModelBase
                 ex is OperationCanceledException ? DownloadStatus.Canceled : DownloadStatus.Failed;
 
             // Short error message for YouTube-related errors, full for others
-            download.ErrorMessage = ex is YoutubeExplodeException ? ex.Message : ex.ToString();
+            download.ErrorMessage = ex is YoutubeExplodeException or DownloadBlockedException
+                ? ex.Message
+                : ex.ToString();
         }
         finally
         {
@@ -275,7 +277,7 @@ public partial class DashboardViewModel : ViewModelBase
                 _viewModelManager.CreateMessageBoxViewModel(
                     "Error",
                     // Short error message for YouTube-related errors, full for others
-                    ex is YoutubeExplodeException
+                    ex is YoutubeExplodeException or DownloadBlockedException
                         ? ex.Message
                         : ex.ToString()
                 )
