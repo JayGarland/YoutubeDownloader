@@ -60,6 +60,15 @@ public partial class SettingsService()
     public partial VideoQualityPreference LastVideoQualityPreference { get; set; } =
         VideoQualityPreference.Highest;
 
+    [ObservableProperty]
+    public partial bool UseCompatibilityModeYtDlp { get; set; }
+
+    [ObservableProperty]
+    public partial bool CompatibilityModeAudioOnly { get; set; } = true;
+
+    [ObservableProperty]
+    public partial string YtDlpPath { get; set; } = "yt-dlp";
+
     public override void Save()
     {
         // Clear the cookies if they are not supposed to be persisted

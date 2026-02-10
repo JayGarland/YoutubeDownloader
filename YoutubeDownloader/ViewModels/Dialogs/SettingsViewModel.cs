@@ -76,6 +76,24 @@ public class SettingsViewModel : DialogViewModelBase
         set => _settingsService.ParallelLimit = Math.Clamp(value, 1, 10);
     }
 
+    public bool UseCompatibilityModeYtDlp
+    {
+        get => _settingsService.UseCompatibilityModeYtDlp;
+        set => _settingsService.UseCompatibilityModeYtDlp = value;
+    }
+
+    public bool CompatibilityModeAudioOnly
+    {
+        get => _settingsService.CompatibilityModeAudioOnly;
+        set => _settingsService.CompatibilityModeAudioOnly = value;
+    }
+
+    public string YtDlpPath
+    {
+        get => _settingsService.YtDlpPath;
+        set => _settingsService.YtDlpPath = value;
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Gress;
@@ -139,6 +140,76 @@ public partial class DashboardViewModel : ViewModelBase
 
             download.Status = DownloadStatus.Completed;
         }
+        catch (DownloadBlockedException ex)
+        {
+            // Try yt-dlp audio fallback if enabled
+            if (
+                _settingsService.UseCompatibilityModeYtDlp
+                && _settingsService.CompatibilityModeAudioOnly
+            )
+            {
+                try
+                {
+                    // Attempt audio-only download via yt-dlp
+                    var videoUrl = $"https://www.youtube.com/watch?v={download.Video!.Id}";
+                    var outputDir = Path.GetDirectoryName(download.FilePath!) ?? ".";
+
+                    // Create progress reporter that updates UI on dispatcher thread
+                    var ytDlpProgress = new Progress<double>(fraction =>
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                            download.Progress.Report(Percentage.FromFraction(fraction))
+                        );
+                    });
+
+                    var ytDlpDownloader = new YtDlpAudioDownloader(_settingsService.YtDlpPath);
+                    var audioFilePath = await ytDlpDownloader.DownloadAudioAsync(
+                        videoUrl,
+                        outputDir,
+                        download.CancellationToken,
+                        progress: ytDlpProgress
+                    );
+
+                    // Update file path to the audio file and mark as completed
+                    download.FilePath = audioFilePath;
+                    download.Status = DownloadStatus.Completed;
+                    return; // Success - exit early
+                }
+                catch (Exception ytDlpEx)
+                {
+                    // yt-dlp fallback failed - clean up and show combined error
+                    try
+                    {
+                        if (!string.IsNullOrWhiteSpace(download.FilePath))
+                            File.Delete(download.FilePath);
+                    }
+                    catch
+                    {
+                        // Ignore
+                    }
+
+                    download.Status = DownloadStatus.Failed;
+                    download.ErrorMessage =
+                        $"{ex.Message}\n\nyt-dlp audio fallback also failed: {ytDlpEx.Message}";
+                    return;
+                }
+            }
+
+            // Compatibility mode not enabled - show original error
+            try
+            {
+                // Delete the incompletely downloaded file
+                if (!string.IsNullOrWhiteSpace(download.FilePath))
+                    File.Delete(download.FilePath);
+            }
+            catch
+            {
+                // Ignore
+            }
+
+            download.Status = DownloadStatus.Failed;
+            download.ErrorMessage = ex.Message;
+        }
         catch (Exception ex)
         {
             try
@@ -156,9 +227,7 @@ public partial class DashboardViewModel : ViewModelBase
                 ex is OperationCanceledException ? DownloadStatus.Canceled : DownloadStatus.Failed;
 
             // Short error message for YouTube-related errors, full for others
-            download.ErrorMessage = ex is YoutubeExplodeException or DownloadBlockedException
-                ? ex.Message
-                : ex.ToString();
+            download.ErrorMessage = ex is YoutubeExplodeException ? ex.Message : ex.ToString();
         }
         finally
         {

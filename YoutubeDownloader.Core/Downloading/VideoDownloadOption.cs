@@ -111,6 +111,13 @@ public partial record VideoDownloadOption
 
                     yield return new VideoDownloadOption(Container.Mp3, true, [audioStreamInfo]);
 
+                    // M4A (MPEG-4 Audio) - commonly used for audio-only downloads
+                    yield return new VideoDownloadOption(
+                        new Container("m4a"),
+                        true,
+                        [audioStreamInfo]
+                    );
+
                     yield return new VideoDownloadOption(
                         new Container("ogg"),
                         true,

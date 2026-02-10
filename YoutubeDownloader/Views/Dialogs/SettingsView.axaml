@@ -1,44 +1,21 @@
-<UserControl
-    x:Class="YoutubeDownloader.Views.Dialogs.SettingsView"
+<UserControl x:Class="YoutubeDownloader.Views.Dialogs.SettingsView"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:dialogs="clr-namespace:YoutubeDownloader.ViewModels.Dialogs"
-    Width="380"
-    x:DataType="dialogs:SettingsViewModel">
+    xmlns:dialogs="clr-namespace:YoutubeDownloader.ViewModels.Dialogs" Width="380" x:DataType="dialogs:SettingsViewModel">
     <Grid RowDefinitions="Auto,*,Auto">
-        <TextBlock
-            Grid.Row="0"
-            Margin="16"
-            FontSize="19"
-            FontWeight="Light"
-            Text="Settings" />
+        <TextBlock Grid.Row="0" Margin="16" FontSize="19" FontWeight="Light" Text="Settings" />
 
-        <Border
-            Grid.Row="1"
-            Padding="0,8"
-            BorderBrush="{DynamicResource MaterialDividerBrush}"
-            BorderThickness="0,1">
+        <Border Grid.Row="1" Padding="0,8" BorderBrush="{DynamicResource MaterialDividerBrush}" BorderThickness="0,1">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                 <StackPanel Orientation="Vertical">
                     <!--  Theme  -->
-                    <DockPanel
-                        Margin="16,8"
-                        LastChildFill="False"
-                        ToolTip.Tip="Preferred user interface theme">
+                    <DockPanel Margin="16,8" LastChildFill="False" ToolTip.Tip="Preferred user interface theme">
                         <TextBlock DockPanel.Dock="Left" Text="Theme" />
-                        <ComboBox
-                            Width="150"
-                            DockPanel.Dock="Right"
-                            ItemsSource="{Binding AvailableThemes}"
-                            SelectedItem="{Binding Theme}" />
+                        <ComboBox Width="150" DockPanel.Dock="Right" ItemsSource="{Binding AvailableThemes}" SelectedItem="{Binding Theme}" />
                     </DockPanel>
 
                     <!--  Auto-updates  -->
-                    <DockPanel
-                        Margin="16,8"
-                        IsVisible="{OnPlatform False,
-                                               Windows=True}"
-                        LastChildFill="False">
+                    <DockPanel Margin="16,8" IsVisible="{OnPlatform False, Windows=True}" LastChildFill="False">
                         <ToolTip.Tip>
                             <TextBlock>
                                 <Run Text="Perform automatic updates on every launch." />
@@ -55,53 +32,31 @@
                     </DockPanel>
 
                     <!--  Persist authentication  -->
-                    <DockPanel
-                        IsVisible="{OnPlatform False,
-                                               Windows=True}"
-                        LastChildFill="False"
-                        ToolTip.Tip="Save authentication cookies to a file so that they can be persisted between sessions">
-                        <TextBlock
-                            Margin="16,8"
-                            DockPanel.Dock="Left"
-                            Text="Persist authentication" />
-                        <ToggleSwitch
-                            Margin="16,8"
-                            DockPanel.Dock="Right"
-                            IsChecked="{Binding IsAuthPersisted}" />
+                    <DockPanel IsVisible="{OnPlatform False, Windows=True}" LastChildFill="False" ToolTip.Tip="Save authentication cookies to a file so that they can be persisted between sessions">
+                        <TextBlock Margin="16,8" DockPanel.Dock="Left" Text="Persist authentication" />
+                        <ToggleSwitch Margin="16,8" DockPanel.Dock="Right" IsChecked="{Binding IsAuthPersisted}" />
                     </DockPanel>
 
                     <!--  Inject language-specific audio streams  -->
-                    <DockPanel
-                        Margin="16,8"
-                        LastChildFill="False"
-                        ToolTip.Tip="Inject audio tracks in alternative languages (if available) into downloaded files">
+                    <DockPanel Margin="16,8" LastChildFill="False" ToolTip.Tip="Inject audio tracks in alternative languages (if available) into downloaded files">
                         <TextBlock DockPanel.Dock="Left" Text="Inject alternative languages" />
                         <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding ShouldInjectLanguageSpecificAudioStreams}" />
                     </DockPanel>
 
                     <!--  Inject subtitles  -->
-                    <DockPanel
-                        Margin="16,8"
-                        LastChildFill="False"
-                        ToolTip.Tip="Inject subtitles (if available) into downloaded files">
+                    <DockPanel Margin="16,8" LastChildFill="False" ToolTip.Tip="Inject subtitles (if available) into downloaded files">
                         <TextBlock DockPanel.Dock="Left" Text="Inject subtitles" />
                         <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding ShouldInjectSubtitles}" />
                     </DockPanel>
 
                     <!--  Inject tags  -->
-                    <DockPanel
-                        Margin="16,8"
-                        LastChildFill="False"
-                        ToolTip.Tip="Inject media tags (if available) into downloaded files">
+                    <DockPanel Margin="16,8" LastChildFill="False" ToolTip.Tip="Inject media tags (if available) into downloaded files">
                         <TextBlock DockPanel.Dock="Left" Text="Inject media tags" />
                         <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding ShouldInjectTags}" />
                     </DockPanel>
 
                     <!--  Skip existing files  -->
-                    <DockPanel
-                        Margin="16,8"
-                        LastChildFill="False"
-                        ToolTip.Tip="When downloading multiple videos, skip those that already have matching files in the output directory">
+                    <DockPanel Margin="16,8" LastChildFill="False" ToolTip.Tip="When downloading multiple videos, skip those that already have matching files in the output directory">
                         <TextBlock DockPanel.Dock="Left" Text="Skip existing files" />
                         <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding ShouldSkipExistingFiles}" />
                     </DockPanel>
@@ -133,45 +88,47 @@
                             </TextBlock>
                         </ToolTip.Tip>
                         <TextBlock DockPanel.Dock="Left" Text="File name template" />
-                        <TextBox
-                            Width="150"
-                            Height="20"
-                            DockPanel.Dock="Right"
-                            FontSize="13"
-                            Text="{Binding FileNameTemplate}"
-                            Theme="{DynamicResource CompactTextBox}" />
+                        <TextBox Width="150" Height="20" DockPanel.Dock="Right" FontSize="13" Text="{Binding FileNameTemplate}" Theme="{DynamicResource CompactTextBox}" />
                     </DockPanel>
 
                     <!--  Parallel limit  -->
-                    <DockPanel
-                        Margin="16,8"
-                        LastChildFill="False"
-                        ToolTip.Tip="How many downloads can be active at the same time">
+                    <DockPanel Margin="16,8" LastChildFill="False" ToolTip.Tip="How many downloads can be active at the same time">
                         <TextBlock DockPanel.Dock="Left" Text="Parallel limit" />
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                             <TextBlock Margin="10,0" Text="{Binding ParallelLimit}" />
-                            <Slider
-                                Width="150"
-                                IsSnapToTickEnabled="True"
-                                Maximum="10"
-                                Minimum="1"
-                                TickFrequency="1"
-                                Value="{Binding ParallelLimit}" />
+                            <Slider Width="150" IsSnapToTickEnabled="True" Maximum="10" Minimum="1" TickFrequency="1" Value="{Binding ParallelLimit}" />
                         </StackPanel>
+                    </DockPanel>
+
+                    <!--  Compatibility Mode (yt-dlp)  -->
+                    <DockPanel Margin="16,8" LastChildFill="False" ToolTip.Tip="Enable fallback to yt-dlp when YouTube blocks video downloads (requires yt-dlp to be installed)">
+                        <TextBlock DockPanel.Dock="Left" Text="Use Compatibility Mode (yt-dlp)" />
+                        <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding UseCompatibilityModeYtDlp}" />
+                    </DockPanel>
+
+                    <!--  Compatibility Mode: Audio-Only  -->
+                    <DockPanel Margin="16,8" IsVisible="{Binding UseCompatibilityModeYtDlp}" LastChildFill="False" ToolTip.Tip="When using compatibility mode, download audio-only (m4a) instead of full video">
+                        <TextBlock DockPanel.Dock="Left" Text="Compatibility Mode: Audio-only" />
+                        <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding CompatibilityModeAudioOnly}" />
+                    </DockPanel>
+
+                    <!--  yt-dlp Path  -->
+                    <DockPanel Margin="16,8" IsVisible="{Binding UseCompatibilityModeYtDlp}" LastChildFill="False">
+                        <ToolTip.Tip>
+                            <TextBlock>
+                                <Run Text="Path to the yt-dlp executable." />
+                                <LineBreak />
+                                <Run Text="Leave blank or use 'yt-dlp' to search in PATH." />
+                            </TextBlock>
+                        </ToolTip.Tip>
+                        <TextBlock DockPanel.Dock="Left" Text="yt-dlp Path" />
+                        <TextBox Width="150" Height="20" DockPanel.Dock="Right" FontSize="13" Text="{Binding YtDlpPath}" Theme="{DynamicResource CompactTextBox}" />
                     </DockPanel>
                 </StackPanel>
             </ScrollViewer>
         </Border>
 
         <!--  Close button  -->
-        <Button
-            Grid.Row="2"
-            Margin="16"
-            HorizontalAlignment="Stretch"
-            Command="{Binding CloseCommand}"
-            Content="CLOSE"
-            IsCancel="True"
-            IsDefault="True"
-            Theme="{DynamicResource MaterialOutlineButton}" />
+        <Button Grid.Row="2" Margin="16" HorizontalAlignment="Stretch" Command="{Binding CloseCommand}" Content="CLOSE" IsCancel="True" IsDefault="True" Theme="{DynamicResource MaterialOutlineButton}" />
     </Grid>
 </UserControl>
