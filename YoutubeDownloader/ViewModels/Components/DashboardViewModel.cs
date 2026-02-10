@@ -95,7 +95,6 @@ public partial class DashboardViewModel : ViewModelBase
         Downloads.Insert(position, download);
         var progress = _progressMuxer.CreateInput();
         var useCompat = _settingsService.UseCompatibilityModeYtDlp;
-        var audioOnly = _settingsService.CompatibilityModeAudioOnly;
         var ytDlpPath = _settingsService.YtDlpPath;
 
         try
@@ -104,7 +103,6 @@ public partial class DashboardViewModel : ViewModelBase
 
             download.Status = DownloadStatus.Started;
 
-            // TODO: Remove temporary compatibility debug message after manual verification.
             if (useCompat)
             {
                 var reservedFilePath = download.FilePath;
@@ -120,20 +118,23 @@ public partial class DashboardViewModel : ViewModelBase
                         mergedProgress.Report(Percentage.FromFraction(fraction))
                     );
                 });
-
-                download.ErrorMessage =
-                    $"DBG compat={useCompat} audioOnly={audioOnly} yt={ytDlpPath}";
+                var compatPlan = CompatibilityModeDownloadPlan.FromSelection(
+                    download.DownloadOption,
+                    download.DownloadPreference,
+                    reservedFilePath
+                );
 
                 try
                 {
                     var yt = new YtDlpDownloader(ytDlpPath);
                     var fallbackPath =
-                        audioOnly
+                        compatPlan.IsAudio
                             ? await yt.DownloadAudioAsync(
                                 videoUrl,
                                 outputDir,
                                 download.CancellationToken,
-                                ytDlpProgress
+                                ytDlpProgress,
+                                compatPlan.AudioFormat
                             )
                         : TryResolveFfmpeg()
                             ? await yt.DownloadVideoAsync(
@@ -219,6 +220,11 @@ public partial class DashboardViewModel : ViewModelBase
                     // Determine fallback mode: audio-only or full video
                     var videoUrl = $"https://www.youtube.com/watch?v={download.Video!.Id}";
                     var outputDir = Path.GetDirectoryName(download.FilePath!) ?? ".";
+                    var compatPlan = CompatibilityModeDownloadPlan.FromSelection(
+                        download.DownloadOption,
+                        download.DownloadPreference,
+                        download.FilePath
+                    );
 
                     // Create progress reporter that updates UI on dispatcher thread
                     var ytDlpProgress = new Progress<double>(fraction =>
@@ -231,14 +237,15 @@ public partial class DashboardViewModel : ViewModelBase
                     var ytDlpDownloader = new YtDlpDownloader(ytDlpPath);
                     string fallbackFilePath;
 
-                    if (audioOnly)
+                    if (compatPlan.IsAudio)
                     {
                         // Audio-only fallback
                         fallbackFilePath = await ytDlpDownloader.DownloadAudioAsync(
                             videoUrl,
                             outputDir,
                             download.CancellationToken,
-                            progress: ytDlpProgress
+                            progress: ytDlpProgress,
+                            audioFormat: compatPlan.AudioFormat
                         );
                     }
                     else
@@ -267,6 +274,12 @@ public partial class DashboardViewModel : ViewModelBase
                 }
                 catch (Exception ytDlpEx)
                 {
+                    var compatPlan = CompatibilityModeDownloadPlan.FromSelection(
+                        download.DownloadOption,
+                        download.DownloadPreference,
+                        download.FilePath
+                    );
+
                     // yt-dlp fallback failed - clean up and show combined error
                     try
                     {
@@ -278,7 +291,7 @@ public partial class DashboardViewModel : ViewModelBase
                         // Ignore
                     }
 
-                    var fallbackType = audioOnly ? "audio" : "video";
+                    var fallbackType = compatPlan.IsAudio ? "audio" : "video";
                     download.Status = DownloadStatus.Failed;
                     download.ErrorMessage =
                         $"{ex.Message}\n\nyt-dlp {fallbackType} fallback also failed: {ytDlpEx.Message}";

@@ -487,6 +487,84 @@ public class YtDlpDownloaderTests
     }
 
     [Fact]
+    public async Task DownloadAudioAsync_WithAudioFormatMp3_ShouldIncludeAudioFormatMp3Argument()
+    {
+        // Arrange
+        var fakeProcessRunner = new FakeProcessRunner(
+            exitCode: 0,
+            stdout: "[download] Destination: test-audio.mp3\n",
+            stderr: ""
+        );
+
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
+        var outputDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+
+        try
+        {
+            Directory.CreateDirectory(outputDir);
+            var fakeOutputFile = Path.Combine(outputDir, "test-audio.mp3");
+            await File.WriteAllTextAsync(fakeOutputFile, "fake audio content");
+
+            // Act
+            await downloader.DownloadAudioAsync(
+                TestVideoUrl,
+                outputDir,
+                CancellationToken.None,
+                progress: null,
+                audioFormat: "mp3"
+            );
+
+            // Assert
+            fakeProcessRunner.LastStartInfo.Should().NotBeNull();
+            fakeProcessRunner.LastStartInfo!.Arguments.Should().Contain("--audio-format mp3");
+        }
+        finally
+        {
+            if (Directory.Exists(outputDir))
+                Directory.Delete(outputDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DownloadAudioAsync_WithAudioFormatM4a_ShouldIncludeAudioFormatM4aArgument()
+    {
+        // Arrange
+        var fakeProcessRunner = new FakeProcessRunner(
+            exitCode: 0,
+            stdout: "[download] Destination: test-audio.m4a\n",
+            stderr: ""
+        );
+
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
+        var outputDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+
+        try
+        {
+            Directory.CreateDirectory(outputDir);
+            var fakeOutputFile = Path.Combine(outputDir, "test-audio.m4a");
+            await File.WriteAllTextAsync(fakeOutputFile, "fake audio content");
+
+            // Act
+            await downloader.DownloadAudioAsync(
+                TestVideoUrl,
+                outputDir,
+                CancellationToken.None,
+                progress: null,
+                audioFormat: "m4a"
+            );
+
+            // Assert
+            fakeProcessRunner.LastStartInfo.Should().NotBeNull();
+            fakeProcessRunner.LastStartInfo!.Arguments.Should().Contain("--audio-format m4a");
+        }
+        finally
+        {
+            if (Directory.Exists(outputDir))
+                Directory.Delete(outputDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task DownloadVideoNoMergeAsync_ShouldCallProcessRunner_WithNoMergeFormatSelector()
     {
         // Arrange

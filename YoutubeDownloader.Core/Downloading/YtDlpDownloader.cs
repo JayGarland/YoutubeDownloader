@@ -29,21 +29,24 @@ public class YtDlpDownloader(string ytDlpPath = "yt-dlp", IProcessRunner? proces
         string url,
         string outputDir,
         CancellationToken cancellationToken = default,
-        IProgress<double>? progress = null
+        IProgress<double>? progress = null,
+        string audioFormat = "m4a"
     )
     {
         // Ensure output directory exists
         Directory.CreateDirectory(outputDir);
 
-        // Build output template path (yt-dlp will substitute %(title)s and %(ext)s)
-        var outputTemplate = Path.Combine(outputDir, "%(title)s.%(ext)s");
+        var normalizedAudioFormat = NormalizeAudioFormat(audioFormat);
+
+        // Use %(id)s prefix to ensure unique filenames and avoid collisions
+        var outputTemplate = Path.Combine(outputDir, "%(id)s_%(title)s.%(ext)s");
 
         // Build yt-dlp process arguments
         var startInfo = new ProcessStartInfo
         {
             FileName = ytDlpPath,
             Arguments =
-                $"-x --audio-format m4a --no-playlist --newline --progress -o \"{outputTemplate}\" \"{url}\"",
+                $"-x --audio-format {normalizedAudioFormat} --no-playlist --newline --progress --print after_move:filepath -o \"{outputTemplate}\" \"{url}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -54,34 +57,40 @@ public class YtDlpDownloader(string ytDlpPath = "yt-dlp", IProcessRunner? proces
         var lastReportedProgress = 0.0;
         var lastReportTime = DateTime.MinValue;
         var progressRegex = new Regex(@"\[download\]\s+(\d{1,3}(?:\.\d+)?)\%");
+        string? finalFilePath = null;
 
         // Progress parser for streaming callbacks
         void ParseProgress(string line)
         {
-            if (progress is null)
-                return;
-
-            var match = progressRegex.Match(line);
-            if (!match.Success)
-                return;
-
-            if (!double.TryParse(match.Groups[1].Value, out var percentage))
-                return;
-
-            var normalizedProgress = Math.Clamp(percentage / 100.0, 0.0, 1.0);
-
-            // Throttle: only report if delta > 0.002 OR time elapsed > 200ms
-            var now = DateTime.UtcNow;
-            var timeSinceLastReport = now - lastReportTime;
-
-            if (
-                normalizedProgress > lastReportedProgress + 0.002
-                || timeSinceLastReport.TotalMilliseconds > 200
-            )
+            if (progress is not null)
             {
-                progress.Report(normalizedProgress);
-                lastReportedProgress = normalizedProgress;
-                lastReportTime = now;
+                var match = progressRegex.Match(line);
+                if (match.Success && double.TryParse(match.Groups[1].Value, out var percentage))
+                {
+                    var normalizedProgress = Math.Clamp(percentage / 100.0, 0.0, 1.0);
+
+                    // Throttle: only report if delta > 0.002 OR time elapsed > 200ms
+                    var now = DateTime.UtcNow;
+                    var timeSinceLastReport = now - lastReportTime;
+
+                    if (
+                        normalizedProgress > lastReportedProgress + 0.002
+                        || timeSinceLastReport.TotalMilliseconds > 200
+                    )
+                    {
+                        progress.Report(normalizedProgress);
+                        lastReportedProgress = normalizedProgress;
+                        lastReportTime = now;
+                    }
+                }
+            }
+
+            // Capture final file path from --print output
+            if (line.Contains(Path.DirectorySeparatorChar) && !line.StartsWith('['))
+            {
+                var trimmedLine = line.Trim();
+                if (File.Exists(trimmedLine))
+                    finalFilePath = trimmedLine;
             }
         }
 
@@ -110,7 +119,10 @@ public class YtDlpDownloader(string ytDlpPath = "yt-dlp", IProcessRunner? proces
 
             // Try to parse the output filename from stdout
             // yt-dlp outputs lines like "[download] Destination: <filename>"
-            var downloadedFile = ParseDownloadedFilePath(stdout, outputDir);
+            var downloadedFile =
+                finalFilePath
+                ?? ParseDownloadedFilePath(stdout, outputDir)
+                ?? ParseAudioFilePath(outputDir, normalizedAudioFormat);
 
             if (downloadedFile is null || !File.Exists(downloadedFile))
             {
@@ -127,7 +139,7 @@ public class YtDlpDownloader(string ytDlpPath = "yt-dlp", IProcessRunner? proces
         catch (OperationCanceledException)
         {
             // Clean up partial downloads on cancellation (best-effort)
-            CleanupPartialFiles(outputDir);
+            CleanupPartialFiles(outputDir, GetAudioCleanupPattern(normalizedAudioFormat));
             throw;
         }
         catch (Exception ex) when (ex is not InvalidOperationException)
@@ -351,9 +363,8 @@ public class YtDlpDownloader(string ytDlpPath = "yt-dlp", IProcessRunner? proces
             }
         }
 
-        // Fallback: Look for .m4a files in output directory
-        var m4aFiles = Directory.GetFiles(outputDir, "*.m4a");
-        return m4aFiles.Length > 0 ? m4aFiles[0] : null;
+        // Fallback: Look for known audio files in output directory
+        return ParseAudioFilePath(outputDir, null);
     }
 
     private static string? ParseVideoFilePath(string stdout, string outputDir, string? format)
@@ -431,7 +442,7 @@ public class YtDlpDownloader(string ytDlpPath = "yt-dlp", IProcessRunner? proces
         try
         {
             // Remove .part files and recent audio/video files (best-effort)
-            var patterns = new[] { "*.part", "*.m4a", pattern };
+            var patterns = new[] { "*.part", "*.m4a", "*.mp3", "*.opus", "*.ogg", pattern };
             foreach (var searchPattern in patterns)
             {
                 foreach (var file in Directory.GetFiles(outputDir, searchPattern))
@@ -451,5 +462,54 @@ public class YtDlpDownloader(string ytDlpPath = "yt-dlp", IProcessRunner? proces
         {
             // Ignore if directory doesn't exist or other issues
         }
+    }
+
+    private static string NormalizeAudioFormat(string audioFormat)
+    {
+        return audioFormat.ToLowerInvariant() switch
+        {
+            "m4a" => "m4a",
+            "mp3" => "mp3",
+            "opus" => "opus",
+            "vorbis" => "vorbis",
+            _ => "m4a",
+        };
+    }
+
+    private static string? ParseAudioFilePath(string outputDir, string? preferredFormat)
+    {
+        try
+        {
+            var preferredPattern = GetAudioCleanupPattern(preferredFormat);
+            var preferredFiles = Directory
+                .GetFiles(outputDir, preferredPattern)
+                .OrderByDescending(f => File.GetLastWriteTimeUtc(f))
+                .ToArray();
+
+            if (preferredFiles.Length > 0)
+                return preferredFiles[0];
+
+            var audioPatterns = new[] { "*.m4a", "*.mp3", "*.opus", "*.ogg", "*.webm" };
+            return audioPatterns
+                .SelectMany(pattern => Directory.GetFiles(outputDir, pattern))
+                .OrderByDescending(f => File.GetLastWriteTimeUtc(f))
+                .FirstOrDefault();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string GetAudioCleanupPattern(string? audioFormat)
+    {
+        return audioFormat?.ToLowerInvariant() switch
+        {
+            "mp3" => "*.mp3",
+            "m4a" => "*.m4a",
+            "opus" => "*.opus",
+            "vorbis" => "*.ogg",
+            _ => "*.m4a",
+        };
     }
 }

@@ -49,6 +49,17 @@ public partial class DownloadMultipleSetupViewModel(
     private void Initialize()
     {
         SelectedContainer = settingsService.LastContainer;
+
+        // In compatibility mode, this toggle acts as a default preselection only.
+        if (
+            settingsService.UseCompatibilityModeYtDlp
+            && settingsService.CompatibilityModeAudioOnly
+            && !SelectedContainer.IsAudioOnly
+        )
+        {
+            SelectedContainer = new Container("m4a");
+        }
+
         SelectedVideoQualityPreference = settingsService.LastVideoQualityPreference;
         SelectedVideos.CollectionChanged += (_, _) => ConfirmCommand.NotifyCanExecuteChanged();
     }

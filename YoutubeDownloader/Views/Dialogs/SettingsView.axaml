@@ -106,9 +106,9 @@
                         <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding UseCompatibilityModeYtDlp}" />
                     </DockPanel>
 
-                    <!--  Compatibility Mode: Audio-Only  -->
-                    <DockPanel Margin="16,8" IsVisible="{Binding UseCompatibilityModeYtDlp}" LastChildFill="False" ToolTip.Tip="When using compatibility mode, download audio-only (m4a) instead of full video">
-                        <TextBlock DockPanel.Dock="Left" Text="Compatibility Mode: Audio-only" />
+                    <!--  Compatibility Mode: Default Audio Preference  -->
+                    <DockPanel Margin="16,8" IsVisible="{Binding UseCompatibilityModeYtDlp}" LastChildFill="False" ToolTip.Tip="When using compatibility mode, preselect an audio format by default. You can still choose video/audio in the download format dropdown.">
+                        <TextBlock DockPanel.Dock="Left" Text="Compatibility: Prefer audio by default" />
                         <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding CompatibilityModeAudioOnly}" />
                     </DockPanel>
 
