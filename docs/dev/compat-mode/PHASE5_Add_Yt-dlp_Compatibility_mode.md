@@ -1,5 +1,11 @@
 ## PHASE 5 — How to package this PR so it gets approved
 
+### USE THIS COMMAND TO CREATE A RELEASE BUILD (with yt-dlp compatibility mode included):
+
+```powershell
+dotnet publish YoutubeDownloader -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true
+```
+
 ### 1) PR title (choose one)
 
 * **“Add yt-dlp compatibility mode (audio/video) + progress + tests for 403 blocks”**
