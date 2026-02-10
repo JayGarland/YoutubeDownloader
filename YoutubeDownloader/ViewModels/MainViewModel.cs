@@ -29,9 +29,9 @@ public partial class MainViewModel(
             return;
 
         var dialog = viewModelManager.CreateMessageBoxViewModel(
-            "Thank you for supporting Ukraine!",
+            "Thank you for supporting nobody!",
             """
-            As Russia wages a genocidal war against my country, I'm grateful to everyone who continues to stand with Ukraine in our fight for freedom.
+            free the political slogon, make everything free -- nobody
 
             Click LEARN MORE to find ways that you can help.
             """,
