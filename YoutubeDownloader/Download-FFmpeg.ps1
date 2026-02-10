@@ -12,11 +12,16 @@ $ErrorActionPreference = "Stop"
 if (-not $Platform) {
     $arch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
 
-    if ($isWindows) {
+    # Check for PowerShell Core variables, fall back to Windows PowerShell detection
+    $isWindowsPS = if (Test-Path variable:global:isWindows) { $isWindows } else { $true }
+    $isLinuxPS = if (Test-Path variable:global:isLinux) { $isLinux } else { $false }
+    $isMacOSPS = if (Test-Path variable:global:isMacOS) { $isMacOS } else { $false }
+
+    if ($isWindowsPS) {
         $Platform = "windows-$arch"
-    } elseif ($isLinux) {
+    } elseif ($isLinuxPS) {
         $Platform = "linux-$arch"
-    } elseif ($isMacOS) {
+    } elseif ($isMacOSPS) {
         $Platform = "osx-$arch"
     } else {
         throw "Unsupported platform"

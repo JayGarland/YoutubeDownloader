@@ -24,8 +24,11 @@
             BorderBrush="{DynamicResource MaterialDividerBrush}"
             BorderThickness="0,1">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                <TextBlock
+                <TextBox
                     Margin="16,8"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    IsReadOnly="True"
                     Text="{Binding Message}"
                     TextWrapping="Wrap" />
             </ScrollViewer>
