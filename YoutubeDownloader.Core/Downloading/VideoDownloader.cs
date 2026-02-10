@@ -110,17 +110,28 @@ public class VideoDownloader : IDisposable
         if (!string.IsNullOrWhiteSpace(dirPath))
             Directory.CreateDirectory(dirPath);
 
-        await _youtube.Videos.DownloadAsync(
-            downloadOption.StreamInfos,
-            trackInfos,
-            new ConversionRequestBuilder(filePath)
-                .SetFFmpegPath(FFmpeg.TryGetCliFilePath() ?? "ffmpeg")
-                .SetContainer(downloadOption.Container)
-                .SetPreset(ConversionPreset.Medium)
-                .Build(),
-            progress?.ToDoubleBased(),
-            cancellationToken
-        );
+        try
+        {
+            await _youtube.Videos.DownloadAsync(
+                downloadOption.StreamInfos,
+                trackInfos,
+                new ConversionRequestBuilder(filePath)
+                    .SetFFmpegPath(FFmpeg.TryGetCliFilePath() ?? "ffmpeg")
+                    .SetContainer(downloadOption.Container)
+                    .SetPreset(ConversionPreset.Medium)
+                    .Build(),
+                progress?.ToDoubleBased(),
+                cancellationToken
+            );
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new DownloadBlockedException(
+                "YouTube refused the request (403 Forbidden). This may be due to rate limiting or regional restrictions. Try again later or check your network settings.",
+                ex,
+                HttpStatusCode.Forbidden
+            );
+        }
     }
 
     public void Dispose()

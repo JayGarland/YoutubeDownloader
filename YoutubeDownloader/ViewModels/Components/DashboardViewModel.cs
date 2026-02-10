@@ -94,15 +94,84 @@ public partial class DashboardViewModel : ViewModelBase
     {
         Downloads.Insert(position, download);
         var progress = _progressMuxer.CreateInput();
+        var useCompat = _settingsService.UseCompatibilityModeYtDlp;
+        var audioOnly = _settingsService.CompatibilityModeAudioOnly;
+        var ytDlpPath = _settingsService.YtDlpPath;
 
         try
         {
-            using var downloader = new VideoDownloader(_settingsService.LastAuthCookies);
-            var tagInjector = new MediaTagInjector();
-
             using var access = await _downloadSemaphore.AcquireAsync(download.CancellationToken);
 
             download.Status = DownloadStatus.Started;
+
+            // TODO: Remove temporary compatibility debug message after manual verification.
+            if (useCompat)
+            {
+                var reservedFilePath = download.FilePath;
+                var videoUrl = download.Video?.Url?.ToString();
+                if (string.IsNullOrWhiteSpace(videoUrl))
+                    videoUrl = $"https://www.youtube.com/watch?v={download.Video!.Id}";
+
+                var outputDir = Path.GetDirectoryName(download.FilePath!) ?? ".";
+                var mergedProgress = download.Progress.Merge(progress);
+                var ytDlpProgress = new Progress<double>(fraction =>
+                {
+                    Dispatcher.UIThread.Post(() =>
+                        mergedProgress.Report(Percentage.FromFraction(fraction))
+                    );
+                });
+
+                download.ErrorMessage =
+                    $"DBG compat={useCompat} audioOnly={audioOnly} yt={ytDlpPath}";
+
+                try
+                {
+                    var yt = new YtDlpDownloader(ytDlpPath);
+                    var fallbackPath =
+                        audioOnly
+                            ? await yt.DownloadAudioAsync(
+                                videoUrl,
+                                outputDir,
+                                download.CancellationToken,
+                                ytDlpProgress
+                            )
+                        : TryResolveFfmpeg()
+                            ? await yt.DownloadVideoAsync(
+                                videoUrl,
+                                outputDir,
+                                mergeFormat: "mp4",
+                                download.CancellationToken,
+                                ytDlpProgress
+                            )
+                        : await yt.DownloadVideoNoMergeAsync(
+                            videoUrl,
+                            outputDir,
+                            formatSelector: @"best[ext=mp4]/best",
+                            download.CancellationToken,
+                            ytDlpProgress
+                        );
+
+                    TryDeleteReservedPlaceholder(reservedFilePath, fallbackPath);
+                    download.FilePath = fallbackPath;
+                    download.ErrorMessage = null;
+                    download.Status = DownloadStatus.Completed;
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // Best-effort cleanup of setup placeholder on failure/cancel in compat mode.
+                    TryDeleteReservedPlaceholder(reservedFilePath);
+                    download.Status =
+                        ex is OperationCanceledException
+                            ? DownloadStatus.Canceled
+                            : DownloadStatus.Failed;
+                    download.ErrorMessage = $"yt-dlp compatibility mode failed: {ex.Message}";
+                    return;
+                }
+            }
+
+            using var downloader = new VideoDownloader(_settingsService.LastAuthCookies);
+            var tagInjector = new MediaTagInjector();
 
             var downloadOption =
                 download.DownloadOption
@@ -142,15 +211,12 @@ public partial class DashboardViewModel : ViewModelBase
         }
         catch (DownloadBlockedException ex)
         {
-            // Try yt-dlp audio fallback if enabled
-            if (
-                _settingsService.UseCompatibilityModeYtDlp
-                && _settingsService.CompatibilityModeAudioOnly
-            )
+            // Try yt-dlp fallback if enabled
+            if (useCompat)
             {
                 try
                 {
-                    // Attempt audio-only download via yt-dlp
+                    // Determine fallback mode: audio-only or full video
                     var videoUrl = $"https://www.youtube.com/watch?v={download.Video!.Id}";
                     var outputDir = Path.GetDirectoryName(download.FilePath!) ?? ".";
 
@@ -162,16 +228,40 @@ public partial class DashboardViewModel : ViewModelBase
                         );
                     });
 
-                    var ytDlpDownloader = new YtDlpAudioDownloader(_settingsService.YtDlpPath);
-                    var audioFilePath = await ytDlpDownloader.DownloadAudioAsync(
-                        videoUrl,
-                        outputDir,
-                        download.CancellationToken,
-                        progress: ytDlpProgress
-                    );
+                    var ytDlpDownloader = new YtDlpDownloader(ytDlpPath);
+                    string fallbackFilePath;
 
-                    // Update file path to the audio file and mark as completed
-                    download.FilePath = audioFilePath;
+                    if (audioOnly)
+                    {
+                        // Audio-only fallback
+                        fallbackFilePath = await ytDlpDownloader.DownloadAudioAsync(
+                            videoUrl,
+                            outputDir,
+                            download.CancellationToken,
+                            progress: ytDlpProgress
+                        );
+                    }
+                    else
+                    {
+                        fallbackFilePath = TryResolveFfmpeg()
+                            ? await ytDlpDownloader.DownloadVideoAsync(
+                                videoUrl,
+                                outputDir,
+                                mergeFormat: "mp4",
+                                download.CancellationToken,
+                                progress: ytDlpProgress
+                            )
+                            : await ytDlpDownloader.DownloadVideoNoMergeAsync(
+                                videoUrl,
+                                outputDir,
+                                formatSelector: @"best[ext=mp4]/best",
+                                download.CancellationToken,
+                                progress: ytDlpProgress
+                            );
+                    }
+
+                    // Update file path to the downloaded file and mark as completed
+                    download.FilePath = fallbackFilePath;
                     download.Status = DownloadStatus.Completed;
                     return; // Success - exit early
                 }
@@ -188,9 +278,10 @@ public partial class DashboardViewModel : ViewModelBase
                         // Ignore
                     }
 
+                    var fallbackType = audioOnly ? "audio" : "video";
                     download.Status = DownloadStatus.Failed;
                     download.ErrorMessage =
-                        $"{ex.Message}\n\nyt-dlp audio fallback also failed: {ytDlpEx.Message}";
+                        $"{ex.Message}\n\nyt-dlp {fallbackType} fallback also failed: {ytDlpEx.Message}";
                     return;
                 }
             }
@@ -233,6 +324,36 @@ public partial class DashboardViewModel : ViewModelBase
         {
             progress.ReportCompletion();
             download.Dispose();
+        }
+    }
+
+    private static bool TryResolveFfmpeg() => FFmpeg.IsAvailable();
+
+    private static void TryDeleteReservedPlaceholder(
+        string? reservedFilePath,
+        string? actualOutputPath = null
+    )
+    {
+        if (string.IsNullOrWhiteSpace(reservedFilePath) || !File.Exists(reservedFilePath))
+            return;
+
+        if (
+            !string.IsNullOrWhiteSpace(actualOutputPath)
+            && string.Equals(reservedFilePath, actualOutputPath, StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            return;
+        }
+
+        try
+        {
+            var fileInfo = new FileInfo(reservedFilePath);
+            if (fileInfo.Length == 0)
+                File.Delete(reservedFilePath);
+        }
+        catch
+        {
+            // Ignore cleanup failures.
         }
     }
 
@@ -289,21 +410,41 @@ public partial class DashboardViewModel : ViewModelBase
             {
                 var video = queryResult.Videos.Single();
 
-                using var downloader = new VideoDownloader(_settingsService.LastAuthCookies);
+                if (_settingsService.UseCompatibilityModeYtDlp)
+                {
+                    // In compatibility mode, avoid probing stream manifests via YoutubeExplode.
+                    var downloads = await _dialogManager.ShowDialogAsync(
+                        _viewModelManager.CreateDownloadMultipleSetupViewModel(
+                            video.Title,
+                            [video],
+                            preselectVideos: true
+                        )
+                    );
 
-                var downloadOptions = await downloader.GetDownloadOptionsAsync(
-                    video.Id,
-                    _settingsService.ShouldInjectLanguageSpecificAudioStreams
-                );
+                    if (downloads is null)
+                        return;
 
-                var download = await _dialogManager.ShowDialogAsync(
-                    _viewModelManager.CreateDownloadSingleSetupViewModel(video, downloadOptions)
-                );
+                    foreach (var download in downloads)
+                        EnqueueDownload(download);
+                }
+                else
+                {
+                    using var downloader = new VideoDownloader(_settingsService.LastAuthCookies);
 
-                if (download is null)
-                    return;
+                    var downloadOptions = await downloader.GetDownloadOptionsAsync(
+                        video.Id,
+                        _settingsService.ShouldInjectLanguageSpecificAudioStreams
+                    );
 
-                EnqueueDownload(download);
+                    var download = await _dialogManager.ShowDialogAsync(
+                        _viewModelManager.CreateDownloadSingleSetupViewModel(video, downloadOptions)
+                    );
+
+                    if (download is null)
+                        return;
+
+                    EnqueueDownload(download);
+                }
 
                 Query = "";
             }

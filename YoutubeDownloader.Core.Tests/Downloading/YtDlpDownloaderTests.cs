@@ -11,9 +11,11 @@ using Xunit;
 
 namespace YoutubeDownloader.Core.Tests.Downloading;
 
-public class YtDlpAudioDownloaderTests
+public class YtDlpDownloaderTests
 {
     private const string TestVideoUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+
+    #region Audio Download Tests
 
     [Fact]
     public async Task DownloadAudioAsync_ShouldCallProcessRunner_WithCorrectArguments()
@@ -25,7 +27,7 @@ public class YtDlpAudioDownloaderTests
             stderr: ""
         );
 
-        var downloader = new YtDlpAudioDownloader("yt-dlp", fakeProcessRunner);
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
         var outputDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
 
         try
@@ -73,7 +75,7 @@ public class YtDlpAudioDownloaderTests
             stderr: "ERROR: Video not available\nSome other error line"
         );
 
-        var downloader = new YtDlpAudioDownloader("yt-dlp", fakeProcessRunner);
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
         var outputDir = Path.GetTempPath();
 
         // Act
@@ -94,7 +96,7 @@ public class YtDlpAudioDownloaderTests
     public async Task DownloadAudioAsync_WhenDownloadBlockedException_TriggersYtDlpFallback()
     {
         // This test verifies the contract: when DownloadBlockedException is thrown,
-        // the DashboardViewModel should catch it and call YtDlpAudioDownloader
+        // the DashboardViewModel should catch it and call YtDlpDownloader
         // if UseCompatibilityModeYtDlp && CompatibilityModeAudioOnly are enabled.
 
         // Arrange
@@ -104,7 +106,7 @@ public class YtDlpAudioDownloaderTests
             stderr: ""
         );
 
-        var downloader = new YtDlpAudioDownloader("yt-dlp", fakeProcessRunner);
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
         var outputDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
 
         try
@@ -161,7 +163,7 @@ public class YtDlpAudioDownloaderTests
             streamingLines: streamingLines
         );
 
-        var downloader = new YtDlpAudioDownloader("yt-dlp", fakeProcessRunner);
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
         var outputDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
 
         var reportedProgress = new List<double>();
@@ -227,7 +229,7 @@ public class YtDlpAudioDownloaderTests
             streamingLines: streamingLines
         );
 
-        var downloader = new YtDlpAudioDownloader("yt-dlp", fakeProcessRunner);
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
         var outputDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
 
         var reportedProgress = new List<double>();
@@ -268,6 +270,263 @@ public class YtDlpAudioDownloaderTests
                 Directory.Delete(outputDir, recursive: true);
         }
     }
+
+    #endregion
+
+    #region Video Download Tests
+
+    [Fact]
+    public async Task DownloadVideoAsync_ShouldCallProcessRunner_WithCorrectArguments()
+    {
+        // Arrange
+        var fakeProcessRunner = new FakeProcessRunner(
+            exitCode: 0,
+            stdout: "[Merger] Merging formats into \"test-video.mp4\"\n",
+            stderr: ""
+        );
+
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
+        var outputDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+
+        try
+        {
+            Directory.CreateDirectory(outputDir);
+
+            // Create a fake output file that the downloader will "find"
+            var fakeOutputFile = Path.Combine(outputDir, "test-video.mp4");
+            await File.WriteAllTextAsync(fakeOutputFile, "fake video content");
+
+            // Act
+            var result = await downloader.DownloadVideoAsync(
+                TestVideoUrl,
+                outputDir,
+                mergeFormat: "mp4",
+                CancellationToken.None
+            );
+
+            // Assert
+            fakeProcessRunner.LastStartInfo.Should().NotBeNull();
+            fakeProcessRunner.LastStartInfo!.FileName.Should().Be("yt-dlp");
+            fakeProcessRunner
+                .LastStartInfo.Arguments.Should()
+                .Contain("-f \"bv*+ba/b\"")
+                .And.Contain("--merge-output-format mp4")
+                .And.Contain("--no-playlist")
+                .And.Contain("--newline")
+                .And.Contain("--progress")
+                .And.Contain("--print after_move:filepath")
+                .And.Contain(TestVideoUrl);
+
+            result.Should().Be(fakeOutputFile);
+        }
+        finally
+        {
+            // Cleanup
+            if (Directory.Exists(outputDir))
+                Directory.Delete(outputDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DownloadVideoAsync_ShouldReportProgress_AndReturnFinalFilePath()
+    {
+        // Arrange - Simulate yt-dlp video download with progress
+        var outputDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var videoId = "dQw4w9WgXcQ";
+        var expectedFile = Path.Combine(outputDir, $"{videoId}_Test Video.mp4");
+
+        var streamingLines = new[]
+        {
+            "[download] Starting video download...",
+            "[download]   15.2% of 50.00MiB at 2.50MiB/s ETA 00:15",
+            "[download]   34.8% of 50.00MiB at 2.48MiB/s ETA 00:10",
+            "[download]   62.1% of 50.00MiB at 2.52MiB/s ETA 00:05",
+            "[download]   89.5% of 50.00MiB at 2.49MiB/s ETA 00:02",
+            "[download]  100% of 50.00MiB at 2.50MiB/s",
+            $"[Merger] Merging formats into \"{expectedFile}\"",
+            expectedFile, // This simulates --print after_move:filepath output
+        };
+
+        var fakeProcessRunner = new FakeProcessRunner(
+            exitCode: 0,
+            stdout: $"{expectedFile}\n",
+            stderr: "",
+            streamingLines: streamingLines
+        );
+
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
+        var reportedProgress = new List<double>();
+        var progress = new Progress<double>(p => reportedProgress.Add(p));
+
+        try
+        {
+            Directory.CreateDirectory(outputDir);
+
+            // Create fake output file
+            await File.WriteAllTextAsync(expectedFile, "video content");
+
+            // Act
+            var result = await downloader.DownloadVideoAsync(
+                TestVideoUrl,
+                outputDir,
+                mergeFormat: "mp4",
+                CancellationToken.None,
+                progress
+            );
+
+            // Assert - Arguments
+            fakeProcessRunner.LastStartInfo.Should().NotBeNull();
+            fakeProcessRunner
+                .LastStartInfo!.Arguments.Should()
+                .Contain("-f \"bv*+ba/b\"")
+                .And.Contain("--merge-output-format mp4");
+
+            // Assert - Progress reporting
+            reportedProgress.Should().NotBeEmpty("progress should be reported");
+            reportedProgress.Should().Contain(p => p >= 0.15, "15% should be reported");
+            reportedProgress.Should().Contain(p => p >= 0.62, "62% should be reported");
+            reportedProgress.Should().Contain(p => p >= 0.89, "89% should be reported");
+            reportedProgress.Should().Contain(1.0, "completion should be reported");
+
+            // Assert - File path
+            result.Should().Be(expectedFile);
+            File.Exists(result).Should().BeTrue();
+        }
+        finally
+        {
+            if (Directory.Exists(outputDir))
+                Directory.Delete(outputDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DownloadVideoAsync_WhenProcessFails_ShouldThrowInvalidOperationException()
+    {
+        // Arrange
+        var fakeProcessRunner = new FakeProcessRunner(
+            exitCode: 1,
+            stdout: "",
+            stderr: "ERROR: Video format not available\nUnable to download requested video"
+        );
+
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
+        var outputDir = Path.GetTempPath();
+
+        // Act
+        var act = async () =>
+            await downloader.DownloadVideoAsync(
+                TestVideoUrl,
+                outputDir,
+                mergeFormat: "mp4",
+                CancellationToken.None
+            );
+
+        // Assert
+        var exception = await act.Should().ThrowAsync<InvalidOperationException>();
+        exception.Which.Message.Should().Contain("yt-dlp failed with exit code 1");
+        exception.Which.Message.Should().Contain("Video format not available");
+    }
+
+    [Fact]
+    public async Task DownloadVideoAsync_WhenCancelled_ShouldCleanupPartialFiles()
+    {
+        // Arrange - Long-running video download
+        var streamingLines = Enumerable
+            .Range(1, 100)
+            .Select(i => $"[download]   {i}.0% of 200.00MiB at 2.00MiB/s ETA 00:50")
+            .ToArray();
+
+        var fakeProcessRunner = new FakeProcessRunner(
+            exitCode: 0,
+            stdout: "",
+            stderr: "",
+            streamingLines: streamingLines
+        );
+
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
+        var outputDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+
+        var reportedProgress = new List<double>();
+        var progress = new Progress<double>(p => reportedProgress.Add(p));
+        var cts = new CancellationTokenSource();
+
+        try
+        {
+            Directory.CreateDirectory(outputDir);
+
+            // Act - Start download and cancel after a short delay
+            var downloadTask = downloader.DownloadVideoAsync(
+                TestVideoUrl,
+                outputDir,
+                mergeFormat: "mp4",
+                cts.Token,
+                progress
+            );
+
+            // Cancel after 50ms
+            await Task.Delay(50);
+            await cts.CancelAsync();
+
+            // Assert - Should throw OperationCanceledException
+            var act = async () => await downloadTask;
+            await act.Should().ThrowAsync<OperationCanceledException>();
+
+            // Some progress should have been reported before cancellation
+            reportedProgress.Should().NotBeEmpty("some progress was reported before cancel");
+
+            // But we shouldn't have all 100 progress updates
+            reportedProgress
+                .Should()
+                .HaveCountLessThan(100, "download was cancelled before completion");
+        }
+        finally
+        {
+            if (Directory.Exists(outputDir))
+                Directory.Delete(outputDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DownloadVideoNoMergeAsync_ShouldCallProcessRunner_WithNoMergeFormatSelector()
+    {
+        // Arrange
+        var fakeProcessRunner = new FakeProcessRunner(
+            exitCode: 0,
+            stdout: "[download] Destination: test-video.mp4\n",
+            stderr: ""
+        );
+
+        var downloader = new YtDlpDownloader("yt-dlp", fakeProcessRunner);
+        var outputDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+
+        try
+        {
+            Directory.CreateDirectory(outputDir);
+            var fakeOutputFile = Path.Combine(outputDir, "test-video.mp4");
+            await File.WriteAllTextAsync(fakeOutputFile, "fake video content");
+
+            // Act
+            var result = await downloader.DownloadVideoNoMergeAsync(
+                TestVideoUrl,
+                outputDir,
+                formatSelector: @"best[ext=mp4]/best",
+                CancellationToken.None
+            );
+
+            // Assert
+            fakeProcessRunner.LastStartInfo.Should().NotBeNull();
+            fakeProcessRunner.LastStartInfo!.Arguments.Should().Contain("-f \"best[ext=mp4]/best\"");
+            fakeProcessRunner.LastStartInfo.Arguments.Should().NotContain("--merge-output-format");
+            result.Should().Be(fakeOutputFile);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDir))
+                Directory.Delete(outputDir, recursive: true);
+        }
+    }
+
+    #endregion
 
     // Fake process runner for testing
     private class FakeProcessRunner(
